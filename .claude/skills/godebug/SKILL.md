@@ -28,6 +28,29 @@ godebug --addr 127.0.0.1:58656 stack
 godebug --addr 127.0.0.1:58656 quit
 ```
 
+## Prerequisites
+
+### Debug Symbols Required
+
+Binaries **must** be compiled with debug symbols for breakpoints to work. Without debug symbols, breakpoints will not be hit and the program will run to completion.
+
+```bash
+# CORRECT - includes debug symbols, disables optimizations
+go build -gcflags="all=-N -l" -o ./myapp .
+
+# CORRECT - default go build includes symbols
+go build -o ./myapp .
+
+# WRONG - strips symbols, breakpoints won't work!
+go build -ldflags "-s -w" -o ./myapp .
+```
+
+**Flags explained:**
+- `-gcflags="all=-N -l"`: Disables optimizations (`-N`) and inlining (`-l`) for all packages
+- `-ldflags "-s -w"`: Strips debug symbols (`-s`) and DWARF info (`-w`) - **avoid this for debugging**
+
+If breakpoints are not being hit, rebuild the binary with debug symbols.
+
 ## Detection Criteria
 
 Use this skill when:
@@ -168,6 +191,20 @@ godebug --addr 127.0.0.1:2345 break --cond "i > 2" main.go:42
 
 **Flags:**
 - `--cond`: Condition expression (e.g., `"x > 10"`, `"name == \"test\""`)
+
+**Shell Quoting for Method Names:**
+
+Function names with special characters (parentheses, asterisks) must be quoted:
+
+```bash
+# WRONG - shell interprets ( and * as glob/subshell
+godebug --addr $ADDR break sync.(*WaitGroup).Wait
+
+# CORRECT - quote the function name
+godebug --addr $ADDR break "sync.(*WaitGroup).Wait"
+godebug --addr $ADDR break "sync.(*Mutex).Lock"
+godebug --addr $ADDR break "bytes.(*Buffer).Write"
+```
 
 **Output (standard breakpoint):**
 ```json
@@ -723,6 +760,114 @@ godebug --addr remote-host:2345 break main.go:42
 godebug --addr remote-host:2345 continue
 ```
 
+### Race Condition Debugging Workflow
+
+Race conditions in concurrent Go code can be challenging to debug because they may execute faster than breakpoints can catch them. Use this workflow:
+
+#### Step 1: Confirm the Race with Go's Race Detector
+
+Before using the debugger, confirm the race condition exists:
+
+```bash
+# Run with race detector
+go run -race ./myapp
+
+# Or test with race detector
+go test -race ./...
+```
+
+The race detector will report data races with stack traces showing where they occur.
+
+#### Step 2: Set Breakpoints on Sync Primitives
+
+For WaitGroup, Mutex, or channel issues, set breakpoints on the sync package methods:
+
+```bash
+# Start debug session
+godebug start ./myapp
+
+# Breakpoints on WaitGroup methods (note: must quote due to special chars)
+godebug --addr $ADDR break "sync.(*WaitGroup).Add"
+godebug --addr $ADDR break "sync.(*WaitGroup).Done"
+godebug --addr $ADDR break "sync.(*WaitGroup).Wait"
+
+# Breakpoints on Mutex methods
+godebug --addr $ADDR break "sync.(*Mutex).Lock"
+godebug --addr $ADDR break "sync.(*Mutex).Unlock"
+
+# Breakpoints on channel operations (runtime)
+godebug --addr $ADDR break "runtime.chansend1"
+godebug --addr $ADDR break "runtime.chanrecv1"
+```
+
+#### Step 3: Set Breakpoints BEFORE Goroutine Creation
+
+For race conditions involving goroutine startup, set breakpoints **before** the `go` statement, not inside the goroutine:
+
+```go
+// Example buggy code:
+for i := 0; i < 10; i++ {
+    go func(id int) {
+        wg.Add(1)  // BUG: Add() inside goroutine
+        // ...
+    }(i)
+}
+wg.Wait()  // May return immediately!
+```
+
+```bash
+# Set breakpoint BEFORE the for loop, not inside the goroutine
+godebug --addr $ADDR break main.go:15  # Line with 'for'
+
+# Use step to watch goroutine creation
+godebug --addr $ADDR step
+```
+
+#### Step 4: Use Conditional Breakpoints for Specific States
+
+```bash
+# Break when WaitGroup counter might be wrong
+godebug --addr $ADDR break --cond "counter == 0" main.go:50
+
+# Break on specific goroutine count
+godebug --addr $ADDR break --cond "len(goroutines) > 5" worker.go:30
+```
+
+#### Step 5: Inspect All Goroutines
+
+When stopped, examine all goroutines to understand the race:
+
+```bash
+# List all goroutines
+godebug --addr $ADDR goroutines
+
+# Switch to each goroutine and inspect
+godebug --addr $ADDR goroutine 5
+godebug --addr $ADDR stack
+godebug --addr $ADDR locals
+```
+
+#### Common Race Patterns
+
+| Pattern | Symptom | Debug Strategy |
+|---------|---------|----------------|
+| WaitGroup.Add inside goroutine | Wait() returns early | Break on `sync.(*WaitGroup).Add`, check call location |
+| Missing mutex lock | Data corruption | Break on shared variable access |
+| Channel send/recv mismatch | Deadlock or panic | Break on channel operations |
+| Closure capturing loop var | Wrong values | Break inside goroutine, check captured values |
+
+#### When Races Are Too Fast
+
+If the race always wins and breakpoints never hit:
+
+1. The bug is **deterministic** - analyze the code statically
+2. Add `time.Sleep()` temporarily to slow down the race
+3. Use `GOMAXPROCS=1` to serialize goroutine execution:
+   ```bash
+   GOMAXPROCS=1 godebug start ./myapp
+   ```
+4. Set breakpoint at `main.main` and use `step` instead of `continue`
+
 ## Best Practices
 
 ### 1. Track the Address
@@ -775,6 +920,120 @@ Always quit when done to release resources:
 godebug --addr $ADDR quit
 ```
 
+## Exit Codes
+
+There are **two types** of exit codes to understand:
+
+1. **godebug CLI exit codes** - The exit code returned by the `godebug` command itself
+2. **Target process exit status** - The exit status of the debugged program (in JSON `data.exitStatus`)
+
+### godebug CLI Exit Codes
+
+These are the exit codes returned by godebug commands. Use `echo $?` after running a command to check.
+
+| Code | Constant | Meaning | JSON Error Code |
+|------|----------|---------|-----------------|
+| 0 | `ExitSuccess` | Command completed successfully | - |
+| 1 | `ExitGenericError` | Unspecified error | `INTERNAL_ERROR`, `EVAL_FAILED` |
+| 2 | `ExitUsageError` | Invalid arguments or flags | `INVALID_ARGUMENT` |
+| 3 | `ExitConnectionError` | Cannot connect to Delve server | `CONNECTION_FAILED`, `CONNECTION_REFUSED` |
+| 4 | `ExitNotFound` | Resource not found (breakpoint, goroutine, frame) | `NOT_FOUND` |
+| 124 | `ExitTimeout` | Operation timed out (GNU timeout convention) | `TIMEOUT` |
+| 125 | `ExitProcessError` | Target process error | `PROCESS_EXITED` |
+
+**JSON Error Codes Reference:**
+
+| Error Code | Description |
+|------------|-------------|
+| `CONNECTION_FAILED` | Cannot reach the Delve server |
+| `CONNECTION_REFUSED` | Server actively refused the connection |
+| `TIMEOUT` | Operation exceeded time limit |
+| `INVALID_ARGUMENT` | Bad input from user |
+| `NOT_FOUND` | Requested resource doesn't exist |
+| `PROCESS_EXITED` | Target program terminated |
+| `EVAL_FAILED` | Expression evaluation failed |
+| `INTERNAL_ERROR` | Unexpected internal error |
+
+**Example:**
+```bash
+godebug --addr 127.0.0.1:2345 break main.go:999
+echo $?  # Returns 4 if line doesn't exist (NOT_FOUND)
+
+godebug --addr 127.0.0.1:9999 status
+echo $?  # Returns 3 if server not running (CONNECTION_REFUSED)
+```
+
+### Target Process Exit Status (`data.exitStatus`)
+
+When the debugged program exits, the `exitStatus` field in the JSON response shows how it terminated. This is separate from the CLI exit code.
+
+**Common values:**
+
+| Status | Meaning |
+|--------|---------|
+| 0 | Program completed successfully |
+| 1 | General error (often `os.Exit(1)` or `log.Fatal()`) |
+| 2 | Panic without recovery, or deadlock detected |
+| n | Value passed to `os.Exit(n)` |
+
+**Signal-based exits** (128 + signal number):
+
+| Status | Signal | Meaning |
+|--------|--------|---------|
+| 130 | SIGINT (2) | Interrupted (Ctrl+C) |
+| 131 | SIGQUIT (3) | Quit with core dump |
+| 134 | SIGABRT (6) | Aborted |
+| 137 | SIGKILL (9) | Killed forcefully |
+| 139 | SIGSEGV (11) | Segmentation fault |
+| 143 | SIGTERM (15) | Terminated |
+
+**Go-specific patterns:**
+
+| Scenario | Exit Status | Notes |
+|----------|-------------|-------|
+| `panic()` without recovery | 2 | Stack trace printed to stderr |
+| `os.Exit(n)` | n | Deferred functions NOT called |
+| `log.Fatal()` | 1 | Calls `os.Exit(1)` after logging |
+| Deadlock detected | 2 | "fatal error: all goroutines are asleep" |
+| Race detector found race | 66 | When running with `-race` |
+
+### Example JSON Response
+
+When the target process exits:
+
+```json
+{
+  "success": true,
+  "command": "continue",
+  "data": {
+    "exitStatus": 0,
+    "exited": true,
+    "running": false
+  },
+  "message": "Process exited"
+}
+```
+
+**Key fields:**
+- `exited: true` - The target process has terminated
+- `exitStatus` - The exit code of the target process (not godebug)
+- The godebug CLI itself returns exit code 0 (success) because the command worked
+
+### Distinguishing the Two
+
+```bash
+# Run godebug and capture both exit codes
+OUTPUT=$(godebug --addr 127.0.0.1:2345 continue)
+CLI_EXIT=$?
+
+# CLI exit code (was the godebug command successful?)
+echo "CLI exit: $CLI_EXIT"
+
+# Target process exit status (how did the debugged program end?)
+TARGET_EXIT=$(echo "$OUTPUT" | jq -r '.data.exitStatus // empty')
+echo "Target exit: $TARGET_EXIT"
+```
+
 ## Troubleshooting
 
 ### "Connection refused"
@@ -805,18 +1064,62 @@ On macOS, you may need to codesign Delve:
 codesign -d -v $(which dlv)
 ```
 
-### Breakpoint Not Hitting
+### Breakpoints Never Hit / Program Exits Immediately
 
-- Verify line number has executable code (not comment/blank)
-- Check file path matches exactly
-- Ensure code path is actually executed
+This is often caused by **missing debug symbols** or **race conditions**.
 
+**Check 1: Debug symbols present?**
 ```bash
-# List sources to verify file path
+# Rebuild with debug symbols
+go build -gcflags="all=-N -l" -o ./myapp .
+
+# Verify symbols exist (should show DWARF info)
+go tool objdump ./myapp | head -20
+```
+
+**Check 2: Is binary stripped?**
+```bash
+# If built with -ldflags "-s -w", symbols are stripped
+# Rebuild WITHOUT those flags
+go build -o ./myapp .
+```
+
+**Check 3: Race condition causing early exit?**
+```bash
+# Set breakpoint at main.main first
+godebug --addr $ADDR break main.main
+godebug --addr $ADDR continue
+
+# Then use step instead of continue
+godebug --addr $ADDR step
+godebug --addr $ADDR step
+```
+
+**Check 4: Code path not executed?**
+```bash
+# List sources to verify file is loaded
 godebug --addr $ADDR sources | grep myfile
 
-# Check breakpoints are set
+# Check breakpoints are actually set
 godebug --addr $ADDR breakpoints
+```
+
+### Breakpoint on Wrong Line
+
+Compiler optimizations can move code. Disable optimizations:
+```bash
+go build -gcflags="all=-N -l" -o ./myapp .
+```
+
+### "could not find function" Error
+
+Function name may need quoting or different format:
+```bash
+# For methods with pointer receivers, quote the name
+godebug --addr $ADDR break "sync.(*WaitGroup).Wait"
+
+# For generic functions, include type parameters
+godebug --addr $ADDR break "slices.Sort[int]"
 ```
 
 ### Timeout Errors
@@ -825,6 +1128,15 @@ Increase timeout for slow operations:
 ```bash
 godebug --addr $ADDR --timeout 60s continue
 ```
+
+### Program Exits with Code 13
+
+Exit code 13 (SIGPIPE) usually means the program completed normally but output was closed. This is common when:
+- The program finishes before breakpoints are hit (race condition)
+- Debug symbols are missing
+- The code path with breakpoints isn't executed
+
+See "Breakpoints Never Hit" above for solutions.
 
 ## Output Format
 
