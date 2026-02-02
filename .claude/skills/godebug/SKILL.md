@@ -61,6 +61,87 @@ Use this skill when:
 - Testing with conditional breakpoints
 - The user mentions `godebug` or stateless debugging
 
+## AI Debugging Strategy
+
+### The Scientific Protocol
+
+Stop "flailing" (randomly changing code). Follow this cycle:
+
+1. **Observation:** Gather raw data (logs, panic traces) without interpretation
+2. **Hypothesis:** Formulate a falsifiable theory (e.g., "The goroutine hangs because the channel is unbuffered")
+3. **Prediction:** Define what *must* happen if the hypothesis is true
+4. **Experiment:** Change **one** variable only. Run the test
+5. **Analysis:** If prediction failed, revert the change. You eliminated one possibility
+
+### Symptom → Command Sequence
+
+| Symptom | First Command | If Result Shows | Then |
+|---------|---------------|-----------------|------|
+| Wrong variable value | `locals` | unexpected value | `eval` parent struct, `stack` for call path |
+| Program crashes/panics | `break` on error line | stack trace | `frame N` + `locals` for each frame |
+| Program hangs | `goroutines` | blocked goroutines | `goroutine N` + `stack` to find blocker |
+| Race condition suspected | `go test -race` first | race location | `break` both locations |
+| Wrong control flow | `break` at branch point | wrong branch taken | `eval` condition expression |
+| Test fails | `start --mode test` | test location | `break` in test, then `step` |
+| Intermittent bug | `break --cond` | specific state | `locals` + `goroutines` |
+
+### Bug Type → Command Sequence
+
+**Data Bug (wrong value):**
+1. `break <file>:<line>` at assignment
+2. `continue`
+3. `locals` to see current state
+4. `eval "expr"` for specific expressions
+5. `stack` to trace where value came from
+6. `frame N` + `locals` to inspect caller's state
+
+**Control Flow Bug (wrong branch):**
+1. `break <file>:<line>` at decision point
+2. `continue`
+3. `eval "condition"` to see boolean result
+4. `step` to confirm which branch executes
+
+**Concurrency Bug (race/deadlock):**
+1. First: `go test -race ./...` outside debugger
+2. `break` on sync primitive or shared variable
+3. `goroutines` to see all goroutine states
+4. `goroutine N` → `stack` → `locals` for each relevant goroutine
+5. Look for: missing locks, wrong order, blocked channels
+
+**Deadlock Investigation:**
+1. `goroutines` - identify which are in `runtime.gopark`
+2. `goroutine N` → `stack` for each blocked goroutine
+3. Draw dependency: "Goroutine A holds Lock 1, waiting for Lock 2. Goroutine B holds Lock 2, waiting for Lock 1"
+4. The cycle is the deadlock
+
+**Memory/Resource Leak:**
+1. Use `pprof` first: `go tool pprof http://localhost:6060/debug/pprof/heap`
+2. `break` at allocation site identified by pprof
+3. `stack` to see who allocates
+4. `eval "len(slice)"` or `eval "cap(slice)"` to check growth
+
+## Debugging Do's and Don'ts
+
+### Mindset & Strategy
+
+| Category | DON'T | DO |
+|----------|-------|-----|
+| **Bias** | Confirmation bias: "I know X is fine" → ignore X's logs | Falsification: "If it's NOT X, then this must return Y. Verify." |
+| **Focus** | Tunnel vision: 4 hours in one function | Divide & conquer: verify inputs/outputs at boundaries first |
+| **Process** | Shotgun: change 3 things at once | Isolation: change ONE thing, revert if no fix, try next |
+| **Ego** | "The library is broken" | "What assumption have I made that is incorrect?" |
+
+### Go-Specific Tactics
+
+| Category | DON'T | DO |
+|----------|-------|-----|
+| **Observability** | `fmt.Println("HERE 1")` spam | `godebug break` + `locals` - no code changes |
+| **Concurrency** | Stare at code imagining races | Run `go test -race` - let runtime prove it |
+| **Logging** | `log.Println("Error happened")` | Structured: `slog.Error("failed", "userID", id, "error", err)` |
+| **Regressions** | Manual checkout of random commits | `git bisect run go test -run TestBroken ./...` |
+| **Testing** | Happy path only | Table-driven with nil, empty, edge cases |
+| **Deadlocks** | Random `time.Sleep()` calls | Stack dump → identify `runtime.gopark` → draw lock graph |
+
 ## Global Flags
 
 | Flag | Description | Default |
@@ -1137,6 +1218,128 @@ Exit code 13 (SIGPIPE) usually means the program completed normally but output w
 - The code path with breakpoints isn't executed
 
 See "Breakpoints Never Hit" above for solutions.
+
+## Output Interpretation
+
+### When `continue` Returns
+
+| JSON Field | Value | Meaning | Next Action |
+|------------|-------|---------|-------------|
+| `exited` | `true` | Program ended | Check `exitStatus`, may need `restart` |
+| `exited` | `false` | Stopped at breakpoint | `locals`, `stack`, `eval` to inspect |
+| `exitStatus` | `0` | Clean exit | Bug may be logic, not crash |
+| `exitStatus` | `2` | Panic or deadlock | Check stderr, `goroutines` |
+| `exitStatus` | `66` | Race detected | Run with `-race` outside debugger |
+| `breakpoint.id` | present | Stopped at breakpoint | Inspect state |
+| `running` | `true` | Still executing | Wait or `status` to poll |
+
+### When `locals` Returns
+
+| Pattern | Interpretation | Next Action |
+|---------|---------------|-------------|
+| `value: "<nil>"` | Nil pointer/interface | Check initialization, `stack` for caller |
+| `value: ""` (string) | Empty string | May be intentional or missing assignment |
+| `children: []` | Empty slice/map | Check if expected, `eval "cap(x)"` |
+| Complex nested struct | Large data | `eval "x.SpecificField"` for targeted inspection |
+
+### When `goroutines` Returns
+
+| Pattern | Interpretation | Next Action |
+|---------|---------------|-------------|
+| Many at `runtime.gopark` | Blocked waiting | Check what they wait for |
+| At `sync.(*Mutex).Lock` | Waiting for lock | Find who holds lock |
+| At `runtime.chanrecv` | Waiting on channel | Find sender |
+| Only 1 at user code | Others blocked | Likely deadlock |
+| Growing count | Goroutine leak | `pprof` goroutine profile |
+
+### Error Recovery
+
+| `error.code` | Meaning | Recovery |
+|--------------|---------|----------|
+| `CONNECTION_REFUSED` | Server not running | `start` new session |
+| `NOT_FOUND` | Invalid breakpoint/goroutine | `breakpoints` or `goroutines` to list valid |
+| `PROCESS_EXITED` | Target ended | `restart` or `quit` + new `start` |
+| `TIMEOUT` | Operation too slow | Increase `--timeout`, check for infinite loop |
+| `EVAL_FAILED` | Bad expression | Check variable exists in scope |
+
+## Multi-Tool Integration
+
+### godebug + Race Detector
+
+Race detector finds locations; godebug inspects state.
+
+```bash
+# 1. Find race locations
+go test -race ./... 2>&1 | tee race.log
+# Extract: "main.go:42" and "main.go:67"
+
+# 2. Debug with godebug
+ADDR=$(godebug start ./myapp | jq -r '.data.addr')
+godebug --addr $ADDR break main.go:42
+godebug --addr $ADDR break main.go:67
+godebug --addr $ADDR continue
+
+# 3. Check goroutine states
+godebug --addr $ADDR goroutines
+
+# 4. Inspect each racing goroutine
+godebug --addr $ADDR goroutine N
+godebug --addr $ADDR locals
+godebug --addr $ADDR stack
+```
+
+### godebug + pprof (Memory Leaks)
+
+pprof identifies allocation sites; godebug inspects context.
+
+```bash
+# 1. Capture heap profile
+go tool pprof http://localhost:6060/debug/pprof/heap
+(pprof) top10
+# Identifies: "cache.go:89 allocates 500MB"
+
+# 2. Debug allocation
+ADDR=$(godebug start ./myapp | jq -r '.data.addr')
+godebug --addr $ADDR break cache.go:89
+godebug --addr $ADDR continue
+godebug --addr $ADDR stack    # Who called this?
+godebug --addr $ADDR locals   # What's allocated?
+```
+
+### godebug + pprof (Goroutine Leaks)
+
+```bash
+# 1. Get goroutine profile
+curl http://localhost:6060/debug/pprof/goroutine?debug=2 > goroutines.txt
+# Look for many goroutines with same stack
+
+# 2. Debug the leak
+ADDR=$(godebug start ./myapp | jq -r '.data.addr')
+godebug --addr $ADDR break worker.go:50  # Creation site
+godebug --addr $ADDR continue
+godebug --addr $ADDR locals    # What state causes leak?
+godebug --addr $ADDR stack     # Full context
+```
+
+### godebug + git bisect (Regressions)
+
+```bash
+# 1. Find breaking commit
+git bisect start
+git bisect bad HEAD
+git bisect good v1.0.0
+git bisect run go test -run TestBroken ./...
+# Result: "abc123 is first bad commit"
+
+# 2. Debug that commit
+git checkout abc123
+ADDR=$(godebug start ./myapp | jq -r '.data.addr')
+godebug --addr $ADDR break <changed_file>:<line>
+godebug --addr $ADDR continue
+godebug --addr $ADDR locals
+
+git bisect reset
+```
 
 ## Output Format
 
