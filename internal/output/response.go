@@ -6,6 +6,9 @@ import (
 	"os"
 )
 
+// ExitFunc can be replaced in tests to prevent os.Exit from killing the test process
+var ExitFunc = os.Exit
+
 // Response is the standard JSON response envelope for all commands
 type Response struct {
 	Success bool        `json:"success"`
@@ -36,7 +39,7 @@ func (r *Response) Print(format OutputFormat) {
 // PrintAndExit outputs the response and exits with the appropriate code
 func (r *Response) PrintAndExit(format OutputFormat) {
 	r.Print(format)
-	os.Exit(r.ExitCode())
+	ExitFunc(r.ExitCode())
 }
 
 // ExitCode returns the appropriate exit code based on the response status and error code

@@ -5,6 +5,7 @@ go 1.25
 require (
 	github.com/go-delve/delve v1.26.0
 	github.com/spf13/cobra v1.10.2
+	pgregory.net/rapid v1.2.0
 )
 
 require (
