@@ -10,23 +10,29 @@ A single-command CLI debugger for Go applications. Each invocation runs one comm
 ## Quick Start
 
 ```bash
-# 1. Start debug session (auto-assigns port)
-godebug start ./myapp
-# Returns: {"data": {"addr": "127.0.0.1:58656", ...}}
+# 1. Start Delve in background (recommended for programs with output)
+dlv debug ./myapp --headless --api-version=2 --listen=:4445 --accept-multiclient &
+sleep 2
 
-# 2. Set breakpoint
-godebug --addr 127.0.0.1:58656 break main.go:42
+# 2. Connect godebug
+godebug connect localhost:4445
 
-# 3. Run to breakpoint
-godebug --addr 127.0.0.1:58656 continue
+# 3. Set breakpoint
+godebug --addr localhost:4445 break main.go:42
 
-# 4. Inspect state
-godebug --addr 127.0.0.1:58656 locals
-godebug --addr 127.0.0.1:58656 stack
+# 4. Run to breakpoint
+godebug --addr localhost:4445 continue
 
-# 5. End session
-godebug --addr 127.0.0.1:58656 quit
+# 5. Inspect state
+godebug --addr localhost:4445 locals
+godebug --addr localhost:4445 stack
+
+# 6. End session
+godebug --addr localhost:4445 quit
 ```
+
+> **Note:** For programs without stdout output, you can use `godebug start ./myapp` instead.
+> See "Starting Delve" section for details on when to use each approach.
 
 ## Prerequisites
 
@@ -1322,14 +1328,30 @@ Increase timeout for slow operations:
 godebug --addr $ADDR --timeout 60s continue
 ```
 
-### Program Exits with Code 13
+### Program Exits with Code 13 (SIGPIPE)
 
-Exit code 13 (SIGPIPE) usually means the program completed normally but output was closed. This is common when:
-- The program finishes before breakpoints are hit (race condition)
-- Debug symbols are missing
-- The code path with breakpoints isn't executed
+Exit code 13 means the program received SIGPIPE when trying to write to stdout/stderr. **This is the most common issue when using `godebug start`.**
 
-See "Breakpoints Never Hit" above for solutions.
+**Root cause:** `godebug start` closes the stdout pipe after returning the server address. When the target program calls `fmt.Println` or similar, it gets SIGPIPE.
+
+**Solution:** Use manual Delve start instead:
+
+```bash
+# Instead of: godebug start ./myapp
+# Use:
+dlv debug ./myapp --headless --api-version=2 --listen=:4445 --accept-multiclient &
+sleep 2
+godebug connect localhost:4445
+```
+
+See "Starting Delve" section above for full details.
+
+**Quick diagnosis:**
+```bash
+# If you see this pattern, it's SIGPIPE:
+godebug --addr $ADDR continue
+# {"data": {"exitStatus": 13, "exited": true}, ...}
+```
 
 ## Output Interpretation
 
