@@ -1,6 +1,6 @@
 # godebug agentic
 
-A stateless CLI debugger for Go applications, designed for AI agent tool calling. A simpler alternative to MCP-based debugging. AI agents use CLI tools equally good as MCPs.
+A stateless CLI debugger for Go applications, designed for AI agent tool calling. Enables runtime verification of application behavior beyond what logs and tests can provide. See [Beyond Tests: Runtime Verification for AI Agents](docs/ai-debugger-verification.md) for the paradigm shift from stochastic generation to deterministic engineering. You can also use godebug for traditional debugging with AI agents. 
 
 ## Overview
 
@@ -62,25 +62,40 @@ The skill documents all 21 commands with verified JSON output examples:
 - Navigation: `stack`, `frame`, `goroutines`, `goroutine`
 - Source: `list`, `sources`
 
-## Why godebug?
+## Why Debug?
 
-### Static vs Dynamic Analysis
+### Traditional Debugging
 
-Most AI coding tools rely on **static analysis**—reading the code and "hallucinating" the execution flow based on patterns.
+AI agents can use `godebug` for classic debugging workflows—finding and fixing bugs:
 
-| Approach | What the AI does |
-|----------|------------------|
-| **Without Debugger** | Guesses what *should* happen |
-| **With Debugger** | Sees what *is* happening |
+- **Set breakpoints** at suspicious locations
+- **Step through** code line by line
+- **Inspect variables** to understand state
+- **Examine call stacks** to trace execution flow
+- **Debug goroutines** to diagnose concurrency issues
 
-In Go, where concurrency is a first-class citizen, reading the code is often insufficient:
+In Go, where concurrency is a first-class citizen, this is especially valuable:
 
 - **Race conditions** depend on timing that can't be determined statically
 - **Deadlocks** emerge from lock ordering that spans multiple goroutines
 - **Channel behavior** depends on buffer sizes and goroutine scheduling
 - **Context cancellation** propagates in ways that require runtime observation
 
-Static analysis produces high false positives/negatives for Go concurrency. A debugger lets the AI observe actual goroutine states, lock contention, and channel operations as they happen.
+### Runtime Verification (Beyond Tests)
+
+Beyond bug-finding, debuggers enable a new paradigm: **verifying application behavior** that logs and tests cannot capture.
+
+| Verification Method | What It Provides | What It Misses |
+|---------------------|------------------|----------------|
+| **Logs** | What code chose to report | Everything between log statements |
+| **Unit Tests** | Pass/fail for predicted scenarios | Intermediate states, timing, actual paths |
+| **Debugger** | Actual runtime state | Nothing—direct observation |
+
+The core insight: **tests verify outcomes, debuggers verify behavior**.
+
+An AI agent that can inspect runtime state doesn't guess—it knows. This transforms code generation from stochastic output to verified engineering.
+
+For the full paradigm shift, see [Beyond Tests: Runtime Verification for AI Agents](docs/ai-debugger-verification.md).
 
 ### Surgical Data Extraction
 
