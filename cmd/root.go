@@ -97,6 +97,11 @@ func init() {
 // Each call returns an isolated command with its own flag state,
 // avoiding the shared global state that would persist between tests.
 func NewRootCmd() *cobra.Command {
+	// Fresh state for this command instance
+	var cmdAddr string
+	var cmdOutputFormat string
+	var cmdTimeout time.Duration
+
 	cmd := &cobra.Command{
 		Use:   "godebug",
 		Short: "AI-friendly Go debugger CLI using Delve",
@@ -106,11 +111,6 @@ Designed for AI agent tool calling.`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
-
-	// Fresh state for this command instance
-	var cmdAddr string
-	var cmdOutputFormat string
-	var cmdTimeout time.Duration
 
 	cmd.PersistentFlags().StringVar(&cmdAddr, "addr", "", "Delve server address (host:port)")
 	cmd.PersistentFlags().StringVar(&cmdOutputFormat, "output", "json", "Output format: json or text")

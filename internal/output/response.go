@@ -71,7 +71,6 @@ func (r *Response) ExitCode() int {
 
 func (r *Response) printJSON() {
 	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "  ")
 	_ = enc.Encode(r)
 }
 
