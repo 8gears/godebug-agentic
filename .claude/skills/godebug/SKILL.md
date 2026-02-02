@@ -61,6 +61,37 @@ Use this skill when:
 - Testing with conditional breakpoints
 - The user mentions `godebug` or stateless debugging
 
+## Debugging Workflow Order
+
+**The debugger is a tool of last resort, not first resort.** Before starting a debug session, use faster tools in this order:
+
+```
+1. Run the program     →  Observe error messages, panic traces, output
+2. Static analysis     →  Read the code, look for known antipatterns
+3. Race detector       →  go run -race / go test -race (for concurrency bugs)
+4. Targeted logging    →  Add temporary log statements at key points
+5. Debugger            →  Only when above tools don't reveal the issue
+```
+
+### When Simpler Tools Are Faster
+
+| Situation | Better Tool | Why |
+|-----------|-------------|-----|
+| Concurrency bug suspected | `go test -race` | Pinpoints exact lines with no stepping |
+| Panic with stack trace | Read the trace | Location already provided |
+| Known bug pattern | Code review | Pattern recognition beats stepping |
+| Need to see one value | Temporary `log.Printf` | Faster than breakpoint setup |
+| Regression after change | `git diff` + review | Compare what changed |
+
+### When the Debugger IS the Right Tool
+
+Use godebug when:
+- **Runtime state inspection**: You need to see actual variable values at specific moments
+- **Complex interactions**: Multiple goroutines, timing-dependent behavior that's hard to reason about
+- **Unclear reproduction**: Bug is intermittent or behavior doesn't match code reading
+- **No obvious pattern**: You've reviewed code and used race detector but can't spot the issue
+- **Exploration**: Understanding unfamiliar code paths by stepping through execution
+
 ## AI Debugging Strategy
 
 ### The Scientific Protocol
