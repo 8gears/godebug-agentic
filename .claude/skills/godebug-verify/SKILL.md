@@ -320,11 +320,8 @@ godebug --addr $ADDR stack
 #   wg.Add(1)
 #   go func() { defer wg.Done(); ... }()
 
-# RE-VERIFY: Same test (restart delve - the restart command may fail)
-# Kill and restart delve:
-pkill -f "dlv debug" && sleep 1
-dlv debug ./myapp --headless --api-version=2 --listen=:4445 --accept-multiclient &
-sleep 2
+# RE-VERIFY: Same test
+godebug --addr $ADDR restart
 
 godebug --addr $ADDR break "sync.(*WaitGroup).Add"
 godebug --addr $ADDR break "sync.(*WaitGroup).Wait"

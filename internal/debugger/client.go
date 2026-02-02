@@ -163,7 +163,7 @@ func (c *Client) Halt() (*api.DebuggerState, error) {
 // Restart restarts the debugged process
 func (c *Client) Restart() (*api.DebuggerState, error) {
 	var out rpc2.RestartOut
-	err := c.call("Restart", rpc2.RestartIn{}, &out)
+	err := c.call("Restart", rpc2.RestartIn{Rebuild: true}, &out)
 	if err != nil {
 		return nil, err
 	}

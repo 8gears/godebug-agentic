@@ -354,8 +354,20 @@ godebug --addr 127.0.0.1:2345 status
 
 #### `restart` - Restart Program
 
+Restarts the debugged program from the beginning. Rebuilds the binary if source changed.
+
 ```bash
 godebug --addr 127.0.0.1:2345 restart
+```
+
+**Output:**
+```json
+{
+  "success": true,
+  "command": "restart",
+  "data": { ... },
+  "message": "Program restarted"
+}
 ```
 
 #### `quit` - End Session
