@@ -12,8 +12,16 @@ tasks:
     cmds:
       - task: build
 
+  _ensure-build-dir:
+    internal: true
+    cmds:
+      - mkdir -p {{.BUILD_DIR}}
+    status:
+      - test -d {{.BUILD_DIR}}
+
   build:
     desc: Build the binary
+    deps: [_ensure-build-dir]
     cmds:
       - go build -ldflags "{{.LDFLAGS}}" -o {{.BUILD_DIR}}/{{.BINARY_NAME}} {{.MAIN_PKG}}
     sources:
@@ -25,6 +33,7 @@ tasks:
 
   build:dev:
     desc: Build with debug symbols (for development)
+    deps: [_ensure-build-dir]
     cmds:
       - go build -o {{.BUILD_DIR}}/{{.BINARY_NAME}} {{.MAIN_PKG}}
 
@@ -123,6 +132,20 @@ tasks:
         {{.BUILD_DIR}}/{{.BINARY_NAME}} --addr $ADDR quit
 
         echo "Integration test passed!"
+
+  build:examples:
+    desc: Build all concurrency bug examples with debug flags
+    deps: [_ensure-build-dir]
+    vars:
+      EXAMPLES_DIR: ./testdata/concurrency_bugs
+    cmds:
+      - |
+        for dir in {{.EXAMPLES_DIR}}/*/; do
+          name=$(basename "$dir")
+          echo "Building $name..."
+          go build -gcflags="all=-N -l" -o {{.BUILD_DIR}}/$name "$dir"
+        done
+      - echo "Built examples in {{.BUILD_DIR}}/"
 
   help:
     desc: Show available commands
