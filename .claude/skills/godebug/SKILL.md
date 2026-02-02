@@ -51,6 +51,87 @@ go build -ldflags "-s -w" -o ./myapp .
 
 If breakpoints are not being hit, rebuild the binary with debug symbols.
 
+## Starting Delve
+
+There are two ways to start a debug session. Choose based on whether your program produces output.
+
+### Recommended: Manual Delve Start (Programs with Output)
+
+**Use this approach for most Go programs.** Any program that uses `fmt.Println`, `log.Println`, or writes to stdout/stderr will cause SIGPIPE (exit code 13) with `godebug start`.
+
+```bash
+# 1. Start Delve in background (keeps stdout connected to terminal)
+dlv debug ./myapp --headless --api-version=2 --listen=:4445 --accept-multiclient &
+sleep 2  # Wait for server to start
+
+# 2. Connect with godebug
+godebug connect localhost:4445
+
+# 3. Debug as normal
+godebug --addr localhost:4445 break main.main
+godebug --addr localhost:4445 continue
+```
+
+**For pre-compiled binaries:**
+```bash
+dlv exec ./myapp --headless --api-version=2 --listen=:4445 --accept-multiclient &
+sleep 2
+godebug connect localhost:4445
+```
+
+**For tests:**
+```bash
+dlv test ./pkg/... --headless --api-version=2 --listen=:4445 --accept-multiclient &
+sleep 2
+godebug connect localhost:4445
+```
+
+**Key flags explained:**
+- `--headless`: Run without terminal UI (required for godebug)
+- `--api-version=2`: Use Delve API v2 (required)
+- `--listen=:4445`: Port to listen on (choose any free port)
+- `--accept-multiclient`: Allow reconnection if connection drops
+- `&`: Run in background so stdout stays connected to terminal
+
+### Alternative: godebug start (Silent Programs Only)
+
+Use `godebug start` only for programs that produce **no output**:
+
+```bash
+# Only for programs without any fmt.Println, log.Println, etc.
+godebug start ./myapp
+# Returns: {"data": {"addr": "127.0.0.1:58656", ...}}
+
+godebug --addr 127.0.0.1:58656 break main.main
+godebug --addr 127.0.0.1:58656 continue
+```
+
+**Why this limitation exists:** `godebug start` launches Delve as a subprocess. When the command returns, the pipe for the target program's stdout is closed. Any subsequent `fmt.Println` in the target causes SIGPIPE (exit code 13), terminating the program before breakpoints are hit.
+
+### Quick Reference
+
+| Program Type | Start Method |
+|--------------|--------------|
+| Has `fmt.Println`, `log.*`, stdout writes | `dlv debug ... &` + `godebug connect` |
+| Silent (no output) | `godebug start` |
+| Tests | `dlv test ... &` + `godebug connect` |
+| Pre-compiled binary | `dlv exec ... &` + `godebug connect` |
+| Remote debugging | `dlv debug --listen=0.0.0.0:4445` on remote |
+
+### Cleanup
+
+When done debugging, clean up the Delve process:
+
+```bash
+# End the debug session
+godebug --addr localhost:4445 quit
+
+# If Delve is still running in background
+pkill -f "dlv debug"
+# or
+pkill -f "dlv exec"
+```
+
 ## Detection Criteria
 
 Use this skill when:
