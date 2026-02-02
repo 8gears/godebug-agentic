@@ -1,17 +1,3 @@
-// Package main demonstrates bugs with nil channel operations.
-//
-// BUG: A nil channel has special behavior:
-// - Sending to nil blocks forever
-// - Receiving from nil blocks forever
-// - Closing nil panics
-//
-// This often happens when channels are conditionally initialized
-// or when struct fields are not properly set up.
-//
-// DEBUGGER TEST:
-// - Run program and observe it hangs
-// - Use delve to inspect the channel - it shows nil
-// - Goroutines are blocked on channel operations that will never complete
 package main
 
 import (
@@ -19,107 +5,101 @@ import (
 	"time"
 )
 
-func demonstrateSendToNil() {
-	fmt.Println("--- Send to nil channel ---")
-	var ch chan int // nil channel, not initialized
+func testChannelSend() {
+	fmt.Println("--- Channel send test ---")
+	var ch chan int
 
-	fmt.Printf("Channel value: %v (nil: %t)\n", ch, ch == nil)
-	fmt.Println("Attempting to send to nil channel...")
-	fmt.Println("(This will block forever)")
+	fmt.Printf("Channel capacity: %d\n", cap(ch))
+	fmt.Println("Testing zero-capacity channel behavior...")
 
 	go func() {
-		ch <- 42 // BUG: blocks forever on nil channel
-		fmt.Println("Send completed (you won't see this)")
+		ch <- 42
+		fmt.Println("Send completed")
 	}()
 
 	time.Sleep(100 * time.Millisecond)
-	fmt.Println("Goroutine is blocked - send to nil never completes")
+	fmt.Println("Goroutine state: waiting for receiver (expected for unbuffered)")
 	fmt.Println()
 }
 
-func demonstrateReceiveFromNil() {
-	fmt.Println("--- Receive from nil channel ---")
-	var ch chan int // nil channel
+func testChannelReceive() {
+	fmt.Println("--- Channel receive test ---")
+	var ch chan int
 
-	fmt.Printf("Channel value: %v (nil: %t)\n", ch, ch == nil)
-	fmt.Println("Attempting to receive from nil channel...")
-	fmt.Println("(This will block forever)")
+	fmt.Printf("Channel capacity: %d\n", cap(ch))
+	fmt.Println("Testing receive from zero-capacity channel...")
 
 	go func() {
-		val := <-ch // BUG: blocks forever on nil channel
-		fmt.Printf("Received: %d (you won't see this)\n", val)
+		val := <-ch
+		fmt.Printf("Received: %d\n", val)
 	}()
 
 	time.Sleep(100 * time.Millisecond)
-	fmt.Println("Goroutine is blocked - receive from nil never completes")
+	fmt.Println("Goroutine state: waiting for sender (expected for unbuffered)")
 	fmt.Println()
 }
 
-func demonstrateCloseNil() {
-	fmt.Println("--- Close nil channel ---")
-	var ch chan int // nil channel
+func testChannelClose() {
+	fmt.Println("--- Channel close test ---")
+	var ch chan int
 
-	fmt.Printf("Channel value: %v (nil: %t)\n", ch, ch == nil)
-	fmt.Println("Attempting to close nil channel...")
-	fmt.Println("(This will panic)")
+	fmt.Printf("Channel capacity: %d\n", cap(ch))
+	fmt.Println("Testing close on zero-capacity channel...")
 
 	defer func() {
 		if r := recover(); r != nil {
-			fmt.Printf("Recovered from panic: %v\n", r)
+			fmt.Printf("Runtime error: %v\n", r)
+			fmt.Println("Note: Closing requires initialized channel")
 		}
 	}()
 
-	close(ch) // BUG: panics on nil channel
-	fmt.Println("Close completed (you won't see this)")
+	close(ch)
+	fmt.Println("Close completed")
 }
 
-// RealWorldExample shows how nil channels can sneak into code
-type Worker struct {
-	tasks chan string // might be nil if not initialized
+type TaskQueue struct {
+	tasks chan string
 }
 
-func (w *Worker) ProcessTask(task string) {
-	// BUG: If w.tasks was never initialized, this blocks forever
-	w.tasks <- task
+func (q *TaskQueue) Submit(task string) {
+	q.tasks <- task
 }
 
-func demonstrateRealWorld() {
+func testTaskQueue() {
 	fmt.Println()
-	fmt.Println("--- Real-world example: uninitialized struct field ---")
+	fmt.Println("--- Task queue initialization test ---")
 
-	worker := &Worker{} // tasks channel is nil!
-	fmt.Printf("Worker tasks channel: %v (nil: %t)\n", worker.tasks, worker.tasks == nil)
+	queue := &TaskQueue{}
+	fmt.Printf("Queue channel capacity: %d\n", cap(queue.tasks))
 
-	fmt.Println("Attempting to process task...")
+	fmt.Println("Submitting task...")
 
 	done := make(chan bool)
 	go func() {
-		worker.ProcessTask("important task") // BUG: blocks forever
+		queue.Submit("test task")
 		done <- true
 	}()
 
 	select {
 	case <-done:
-		fmt.Println("Task processed")
+		fmt.Println("Task submitted")
 	case <-time.After(100 * time.Millisecond):
-		fmt.Println("Timeout! Worker is blocked on nil channel")
+		fmt.Println("Timeout - increase channel buffer size")
 	}
 }
 
 func main() {
-	fmt.Println("Starting nil channel operations demo...")
+	fmt.Println("Channel capacity analysis")
 	fmt.Println()
 
-	demonstrateSendToNil()
-	demonstrateReceiveFromNil()
-	demonstrateCloseNil()
-	demonstrateRealWorld()
+	testChannelSend()
+	testChannelReceive()
+	testChannelClose()
+	testTaskQueue()
 
 	fmt.Println()
-	fmt.Println("Summary of nil channel behavior:")
-	fmt.Println("  - send to nil:    blocks forever")
-	fmt.Println("  - receive from nil: blocks forever")
-	fmt.Println("  - close nil:      panics")
-	fmt.Println()
-	fmt.Println("Use delve to inspect blocked goroutines and see nil channel values.")
+	fmt.Println("Summary:")
+	fmt.Println("  - Zero-capacity channels block until paired operation")
+	fmt.Println("  - Consider using buffered channels for async operations")
+	fmt.Println("  - Use make(chan T, n) to specify buffer size")
 }
