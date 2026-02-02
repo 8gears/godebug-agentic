@@ -6,8 +6,8 @@ import (
 	"github.com/go-delve/delve/service/api"
 	"github.com/spf13/cobra"
 
-	"github.com/8gears/godebug/internal/debugger"
-	"github.com/8gears/godebug/internal/output"
+	"github.com/8gears/godebug-agentic/internal/debugger"
+	"github.com/8gears/godebug-agentic/internal/output"
 )
 
 // variableToMap converts a Variable to a map for JSON output

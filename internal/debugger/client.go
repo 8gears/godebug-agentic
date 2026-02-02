@@ -11,7 +11,7 @@ import (
 	"github.com/go-delve/delve/service/api"
 	"github.com/go-delve/delve/service/rpc2"
 
-	"github.com/8gears/godebug/internal/output"
+	"github.com/8gears/godebug-agentic/internal/output"
 )
 
 // Client wraps the Delve RPC2 client

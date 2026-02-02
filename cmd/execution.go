@@ -4,7 +4,7 @@ import (
 	"github.com/go-delve/delve/service/api"
 	"github.com/spf13/cobra"
 
-	"github.com/8gears/godebug/internal/output"
+	"github.com/8gears/godebug-agentic/internal/output"
 )
 
 // stateToData converts a DebuggerState to a response data map

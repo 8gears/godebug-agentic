@@ -75,7 +75,7 @@ tasks:
     desc: Format code
     cmds:
       - gofmt -s -w .
-      - goimports -w -local github.com/8gears/godebug .
+      - goimports -w -local github.com/8gears/godebug-agentic .
 
   tidy:
     desc: Tidy go modules

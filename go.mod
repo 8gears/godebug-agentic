@@ -1,4 +1,4 @@
-module github.com/8gears/godebug
+module github.com/8gears/godebug-agentic
 
 go 1.25
 

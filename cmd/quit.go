@@ -3,7 +3,7 @@ package cmd
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/8gears/godebug/internal/output"
+	"github.com/8gears/godebug-agentic/internal/output"
 )
 
 var quitCmd = &cobra.Command{

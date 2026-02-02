@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/8gears/godebug/internal/output"
+	"github.com/8gears/godebug-agentic/internal/output"
 )
 
 // LaunchMode specifies how to start the debugger

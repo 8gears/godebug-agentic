@@ -1,6 +1,6 @@
-# godebug
+# godebug agentic
 
-A stateless CLI debugger for Go applications, designed for AI agent tool calling. A simpler alternative to MCP-based debugging. AI agents use CLI tools equally good as MCPs, no protocol overhead required.
+A stateless CLI debugger for Go applications, designed for AI agent tool calling. A simpler alternative to MCP-based debugging. AI agents use CLI tools equally good as MCPs.
 
 ## Overview
 
@@ -15,9 +15,9 @@ A stateless CLI debugger for Go applications, designed for AI agent tool calling
                               │ JSON-RPC
                               │
 ┌─────────────────────────────────────────────────────────────┐
-│  godebug start ./app    │  godebug break main.go:42        │
-│  godebug continue       │  godebug locals                  │
-│  (each command connects, executes, outputs JSON, exits)    │
+│  godebug start ./app    │  godebug break main.go:42         │
+│  godebug continue       │  godebug locals                   │
+│  (each command connects, executes, outputs JSON, exits)     │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -25,220 +25,42 @@ A stateless CLI debugger for Go applications, designed for AI agent tool calling
 
 ### Prerequisites
 
-- Go 1.21+
+- Go 1.24+
 - [Delve](https://github.com/go-delve/delve) debugger (`go install github.com/go-delve/delve/cmd/dlv@latest`)
 
-### From Source
+### Install
 
 ```bash
-git clone https://github.com/8gears/godebug.git
-cd godebug
-go install .
-```
-
-Or using Task:
-
-```bash
-task install
+go install github.com/8gears/godebug-agentic@latest
 ```
 
 ## Quick Start
 
 ```bash
-# 1. Start a debug session
+# Start debug session (returns JSON with server address)
 godebug start ./cmd/myapp
-# Returns: {"success":true,"data":{"addr":"127.0.0.1:38697",...}}
+# {"data":{"addr":"127.0.0.1:38697",...}}
 
-# 2. Use the returned address for all subsequent commands
-ADDR="127.0.0.1:38697"
-
-# 3. Set a breakpoint
-godebug --addr $ADDR break main.go:42
-
-# 4. Continue execution
-godebug --addr $ADDR continue
-
-# 5. Inspect variables
-godebug --addr $ADDR locals
-
-# 6. End the session
-godebug --addr $ADDR quit
+# Use --addr for all subsequent commands
+godebug --addr 127.0.0.1:38697 break main.go:42
+godebug --addr 127.0.0.1:38697 continue
+godebug --addr 127.0.0.1:38697 locals
+godebug --addr 127.0.0.1:38697 quit
 ```
 
-## Commands
+## Documentation
 
-### Session Management
+**For complete command reference, examples, and workflows, see the Claude Code skill:**
 
-| Command | Description |
-|---------|-------------|
-| `start <target>` | Start debugging a Go package/binary |
-| `connect <addr>` | Connect to an existing Delve server |
-| `status` | Show current debug state (running/paused/exited) |
-| `restart` | Restart the debugged program |
-| `quit` | Stop debugging and terminate the server |
+📖 [**.claude/skills/godebug/SKILL.md**](.claude/skills/godebug/SKILL.md)
 
-### Breakpoints
-
-| Command | Description |
-|---------|-------------|
-| `break <location>` | Set a breakpoint (file:line or function) |
-| `break <loc> --cond "expr"` | Set a conditional breakpoint |
-| `clear <id>` | Remove a breakpoint by ID |
-| `breakpoints` | List all breakpoints |
-
-### Execution Control
-
-| Command | Description |
-|---------|-------------|
-| `continue` | Continue until next breakpoint |
-| `next` | Step over to next line |
-| `step` | Step into function call |
-| `stepout` | Step out of current function |
-
-### Inspection
-
-| Command | Description |
-|---------|-------------|
-| `locals` | Show local variables |
-| `args` | Show function arguments |
-| `eval <expr>` | Evaluate a Go expression |
-
-### Navigation
-
-| Command | Description |
-|---------|-------------|
-| `stack` | Show stack trace |
-| `stack --depth N` | Show stack trace with depth limit |
-| `frame <index>` | Switch to stack frame |
-| `goroutines` | List all goroutines |
-| `goroutine <id>` | Switch to goroutine |
-
-### Source
-
-| Command | Description |
-|---------|-------------|
-| `list` | Show source at current location |
-| `list --context N` | Show source with N lines of context |
-| `sources [filter]` | List all source files |
-
-## Global Flags
-
-| Flag | Description |
-|------|-------------|
-| `--addr <host:port>` | Delve server address (required for all commands except `start`/`connect`) |
-| `--output json` | JSON output (default) |
-| `--output text` | Human-readable output |
-
-## Output Format
-
-All commands return a consistent JSON envelope:
-
-```json
-{
-  "success": true,
-  "command": "continue",
-  "data": {
-    "location": {
-      "file": "/path/to/main.go",
-      "line": 42,
-      "function": "main.handleRequest"
-    },
-    "goroutine": {"id": 1},
-    "breakpoint": {"id": 1, "file": "main.go", "line": 42}
-  },
-  "message": "Stopped at breakpoint"
-}
-```
-
-Error responses:
-
-```json
-{
-  "success": false,
-  "command": "break",
-  "error": "could not find file /path/to/nonexistent.go"
-}
-```
-
-## AI Agent Example
-
-```bash
-# AI extracts 'addr' from response and tracks it
-RESPONSE=$(godebug start ./cmd/server)
-ADDR=$(echo $RESPONSE | jq -r '.data.addr')
-
-# AI uses --addr for all commands
-godebug --addr $ADDR break handlers/user.go:42
-godebug --addr $ADDR continue
-godebug --addr $ADDR locals
-godebug --addr $ADDR eval "user.Name"
-godebug --addr $ADDR stack
-godebug --addr $ADDR quit
-```
-
-## Start Modes
-
-```bash
-# Debug mode (default) - compile and debug
-godebug start ./cmd/myapp
-
-# Test mode - debug tests
-godebug start --mode test ./...
-
-# Exec mode - debug pre-compiled binary
-godebug start --mode exec ./myapp
-
-# With program arguments
-godebug start ./cmd/myapp -- -port 8080 -config prod.yaml
-```
-
-## Development
-
-### Prerequisites
-
-- [Task](https://taskfile.dev) (optional, for task runner)
-- [golangci-lint](https://golangci-lint.run) (for linting)
-
-### Available Tasks
-
-```bash
-task              # Build the binary
-task build        # Build optimized binary to ./bin/godebug
-task build:dev    # Build with debug symbols
-task test         # Run tests with race detection
-task test:cover   # Run tests with coverage
-task lint         # Run golangci-lint
-task lint:fix     # Run linter with auto-fix
-task fmt          # Format code
-task verify       # Run tidy + lint + test + build
-task clean        # Remove build artifacts
-```
-
-### Project Structure
-
-```
-godebug/
-├── main.go                     # Entry point
-├── cmd/
-│   ├── root.go                 # Cobra root, --addr/--output flags
-│   ├── start.go                # Start debug session
-│   ├── connect.go              # Connect to existing server
-│   ├── status.go               # Show state
-│   ├── quit.go                 # Stop debugging
-│   ├── breakpoint.go           # break, clear, breakpoints
-│   ├── execution.go            # continue, step, next, stepout, restart
-│   ├── inspect.go              # locals, args, eval
-│   ├── navigation.go           # stack, frame, goroutines, goroutine
-│   └── source.go               # list, sources
-├── internal/
-│   ├── debugger/
-│   │   ├── client.go           # Delve RPC2 client wrapper
-│   │   └── launcher.go         # Spawns dlv headless
-│   └── output/
-│       └── response.go         # JSON response envelope
-└── testdata/
-    └── debugme/                # Test application
-```
+The skill documents all 21 commands with verified JSON output examples:
+- Session management: `start`, `connect`, `quit`, `status`, `restart`
+- Breakpoints: `break` (with `--cond` for conditionals), `clear`, `breakpoints`
+- Execution: `continue`, `next`, `step`, `stepout`
+- Inspection: `locals`, `args`, `eval`
+- Navigation: `stack`, `frame`, `goroutines`, `goroutine`
+- Source: `list`, `sources`
 
 ## Why godebug?
 
@@ -260,17 +82,6 @@ In Go, where concurrency is a first-class citizen, reading the code is often ins
 
 Static analysis produces high false positives/negatives for Go concurrency. A debugger lets the AI observe actual goroutine states, lock contention, and channel operations as they happen.
 
-```bash
-# AI debugging a suspected race condition
-godebug --addr $ADDR goroutines                    # List all goroutines
-godebug --addr $ADDR goroutine 7                   # Switch to worker goroutine
-godebug --addr $ADDR locals                        # See its local state
-godebug --addr $ADDR eval "len(ch)"                # Check channel buffer
-godebug --addr $ADDR break sync.(*Mutex).Lock      # Break on lock acquisition
-godebug --addr $ADDR continue                      # Run until lock contention
-godebug --addr $ADDR stack                         # See who's holding the lock
-```
-
 ### Surgical Data Extraction
 
 With `eval`, an AI can extract exactly the data it needs without log spam:
@@ -280,7 +91,6 @@ With `eval`, an AI can extract exactly the data it needs without log spam:
 godebug --addr $ADDR eval "myStruct.InnerField.Map[\"key\"]"
 godebug --addr $ADDR eval "len(users)"
 godebug --addr $ADDR eval "err.Error()"
-godebug --addr $ADDR eval "ctx.Err()"
 ```
 
 **Benefits:**
@@ -288,44 +98,9 @@ godebug --addr $ADDR eval "ctx.Err()"
 - **Token efficient**: Fetch only the relevant data, not entire log dumps
 - **Iterative exploration**: Drill down into nested structures on demand
 
-Traditional debugging workflow with logs:
-```
-1. AI guesses what to log
-2. Adds print statements
-3. User rebuilds and runs
-4. AI reads massive log output (thousands of tokens)
-5. Repeat until found
-```
-
-With `godebug`:
-```
-1. AI sets breakpoint at crash site
-2. Evaluates specific expressions (tens of tokens each)
-3. Finds root cause in one session
-```
-
 ### Context Window Efficiency
 
-LLMs have limited context windows. Dumping entire log files or massive codebases into the prompt:
-- Fills up the context quickly
-- Buries relevant information in noise
-- Degrades reasoning quality
-
-`godebug` returns **focused, structured data**:
-
-```json
-{
-  "success": true,
-  "command": "eval",
-  "data": {
-    "name": "user.Profile.Settings[\"theme\"]",
-    "type": "string",
-    "value": "\"dark\""
-  }
-}
-```
-
-Compare context usage:
+LLMs have limited context windows. `godebug` returns **focused, structured data**:
 
 | Approach | Tokens | Signal-to-noise |
 |----------|--------|-----------------|
@@ -334,14 +109,130 @@ Compare context usage:
 | `godebug eval` | ~50 | High (exactly what was asked) |
 | `godebug locals` | ~200 | High (current scope only) |
 
-The AI stays focused on the problem instead of parsing through noise.
-
 ### Design Principles
 
 - **Stateless**: No session files or hidden state—just pass `--addr`
 - **JSON output**: Structured responses for programmatic consumption
 - **Single command**: Each invocation is independent, perfect for AI agents
 - **Full Delve power**: All debugging capabilities through a clean CLI
+
+## Example: Debugging a Concurrency Bug
+
+This example shows how to debug a WaitGroup race condition in `testdata/concurrency_bugs/waitgroup_race`.
+
+### The Bug
+
+```go
+// BUGGY: Add() races with Wait()
+for i := 0; i < 10; i++ {
+    go func(id int) {
+        wg.Add(1)  // May execute AFTER Wait() returns
+        defer wg.Done()
+    }(i)
+}
+wg.Wait()  // Returns immediately if no Add() called yet
+```
+
+### Debug Session
+
+```bash
+# Start debug session and capture address
+ADDR=$(godebug start ./testdata/concurrency_bugs/waitgroup_race | jq -r '.data.addr')
+
+# Set breakpoints
+godebug --addr $ADDR break main.go:18  # wg.Add(1)
+godebug --addr $ADDR break main.go:27  # wg.Wait()
+
+# Continue - hits Wait() FIRST (proving the race)
+godebug --addr $ADDR continue
+# {"data":{"location":{"line":27}}}  <- Wait() reached before Add()!
+
+# Check WaitGroup state
+godebug --addr $ADDR locals
+# wg.state.v = 0  <- No Add() called yet!
+
+# Check goroutines
+godebug --addr $ADDR goroutines
+# Main at Wait() (line 27), workers still at lines 17-18
+
+godebug --addr $ADDR quit
+```
+
+**Finding:** Main goroutine reaches `Wait()` before any worker calls `Add()`, so `Wait()` returns immediately.
+
+## Development
+
+### Prerequisites
+
+- [Task](https://taskfile.dev) (optional, for task runner)
+- [golangci-lint](https://golangci-lint.run) (for linting)
+
+### Available Tasks
+
+```bash
+task              # Build the binary
+task build        # Build optimized binary to ./bin/godebug
+task build:dev    # Build with debug symbols
+task test         # Run tests with race detection
+task test:cover   # Run tests with coverage
+task lint         # Run golangci-lint
+task verify       # Run tidy + lint + test + build
+task clean        # Remove build artifacts
+```
+
+### Project Structure
+
+```
+godebug-agentic/
+├── main.go                     # Entry point
+├── cmd/
+│   ├── root.go                 # Cobra root, --addr/--output flags
+│   ├── start.go                # Start debug session
+│   ├── connect.go              # Connect to existing server
+│   ├── quit.go                 # Quit debug session
+│   ├── status.go               # Check server status
+│   ├── breakpoint.go           # break, clear, breakpoints
+│   ├── execution.go            # continue, step, next, stepout, restart
+│   ├── inspect.go              # locals, args, eval
+│   ├── navigation.go           # stack, frame, goroutines, goroutine
+│   └── source.go               # list, sources
+├── internal/
+│   ├── debugger/
+│   │   ├── client.go           # Delve RPC2 client wrapper
+│   │   └── launcher.go         # Spawns dlv headless
+│   └── output/
+│       ├── response.go         # JSON response envelope
+│       ├── errors.go           # Error types and handling
+│       └── exitcodes.go        # CLI exit codes
+├── testdata/
+│   ├── debugme/                # Basic test application
+│   └── concurrency_bugs/       # Concurrency bug examples
+└── .claude/
+    └── skills/godebug/         # Claude Code skill documentation
+```
+
+### Test Data: Concurrency Bug Examples
+
+The `testdata/concurrency_bugs/` directory contains intentionally buggy Go programs for practicing debugging:
+
+| Example | Bug Type |
+|---------|----------|
+| `waitgroup_race/` | WaitGroup Add/Wait race condition |
+| `race_counter/` | Unsynchronized counter increment |
+| `deadlock_circular/` | Circular lock ordering deadlock |
+| `closure_loop/` | Loop variable capture in closures |
+| `mutex_copy/` | Mutex copied via value receiver |
+| `channel_nil/` | Operations on nil channels |
+| `leak_forgotten_sender/` | Goroutine leak from abandoned channel send |
+| `select_timeout_leak/` | Timer leak from `time.After` in loops |
+
+```bash
+# Build all examples
+task build:examples
+
+# Debug an example
+godebug start ./testdata/concurrency_bugs/waitgroup_race
+```
 
 ## License
 
