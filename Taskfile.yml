@@ -1,0 +1,130 @@
+version: "3"
+
+vars:
+  BINARY_NAME: godebug
+  BUILD_DIR: ./bin
+  MAIN_PKG: .
+  LDFLAGS: -s -w
+
+tasks:
+  default:
+    desc: Build the binary
+    cmds:
+      - task: build
+
+  build:
+    desc: Build the binary
+    cmds:
+      - go build -ldflags "{{.LDFLAGS}}" -o {{.BUILD_DIR}}/{{.BINARY_NAME}} {{.MAIN_PKG}}
+    sources:
+      - "**/*.go"
+      - go.mod
+      - go.sum
+    generates:
+      - "{{.BUILD_DIR}}/{{.BINARY_NAME}}"
+
+  build:dev:
+    desc: Build with debug symbols (for development)
+    cmds:
+      - go build -o {{.BUILD_DIR}}/{{.BINARY_NAME}} {{.MAIN_PKG}}
+
+  install:
+    desc: Install binary to GOPATH/bin
+    cmds:
+      - go install -ldflags "{{.LDFLAGS}}" {{.MAIN_PKG}}
+
+  test:
+    desc: Run all tests
+    cmds:
+      - go test -v -race ./...
+
+  test:short:
+    desc: Run tests in short mode
+    cmds:
+      - go test -short ./...
+
+  test:cover:
+    desc: Run tests with coverage
+    cmds:
+      - go test -race -coverprofile=coverage.out -covermode=atomic ./...
+      - go tool cover -html=coverage.out -o coverage.html
+    generates:
+      - coverage.out
+      - coverage.html
+
+  lint:
+    desc: Run golangci-lint
+    cmds:
+      - golangci-lint run
+
+  lint:fix:
+    desc: Run golangci-lint with auto-fix
+    cmds:
+      - golangci-lint run --fix
+
+  fmt:
+    desc: Format code
+    cmds:
+      - gofmt -s -w .
+      - goimports -w -local github.com/8gears/godebug .
+
+  tidy:
+    desc: Tidy go modules
+    cmds:
+      - go mod tidy
+
+  clean:
+    desc: Remove build artifacts
+    cmds:
+      - rm -rf {{.BUILD_DIR}}
+      - rm -f coverage.out coverage.html
+
+  verify:
+    desc: Run all verification (lint, test, build)
+    cmds:
+      - task: tidy
+      - task: lint
+      - task: test
+      - task: build
+
+  run:
+    desc: Build and run with arguments
+    cmds:
+      - task: build
+      - "{{.BUILD_DIR}}/{{.BINARY_NAME}} {{.CLI_ARGS}}"
+
+  # Integration test helpers
+  test:integration:
+    desc: Run a quick integration test
+    cmds:
+      - task: build
+      - |
+        echo "Starting debug session..."
+        ADDR=$({{.BUILD_DIR}}/{{.BINARY_NAME}} start ./testdata/debugme | jq -r '.data.addr')
+        if [ -z "$ADDR" ] || [ "$ADDR" = "null" ]; then
+          echo "Failed to start debug session"
+          exit 1
+        fi
+        echo "Debug server at: $ADDR"
+
+        echo "Setting breakpoint..."
+        {{.BUILD_DIR}}/{{.BINARY_NAME}} --addr $ADDR break testdata/debugme/main.go:7
+
+        echo "Continuing to breakpoint..."
+        {{.BUILD_DIR}}/{{.BINARY_NAME}} --addr $ADDR continue
+
+        echo "Getting locals..."
+        {{.BUILD_DIR}}/{{.BINARY_NAME}} --addr $ADDR locals
+
+        echo "Checking stack..."
+        {{.BUILD_DIR}}/{{.BINARY_NAME}} --addr $ADDR stack
+
+        echo "Quitting..."
+        {{.BUILD_DIR}}/{{.BINARY_NAME}} --addr $ADDR quit
+
+        echo "Integration test passed!"
+
+  help:
+    desc: Show available commands
+    cmds:
+      - task --list
