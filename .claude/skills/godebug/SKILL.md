@@ -403,6 +403,15 @@ godebug --addr 127.0.0.1:2345 break --cond "i > 2" main.go:42
 **Flags:**
 - `--cond`: Condition expression (e.g., `"x > 10"`, `"name == \"test\""`)
 
+**File Path Resolution:**
+
+Breakpoint locations can be specified as:
+- **Short filename** (e.g., `main.go:42`) - works if the file is unique in loaded sources
+- **Relative path** (e.g., `pkg/handler/main.go:42`) - when multiple files share the same name
+- **Absolute path** (e.g., `/home/user/project/main.go:42`) - always unambiguous
+
+If you get "could not find file", use `godebug sources` to see how files are referenced.
+
 **Shell Quoting for Method Names:**
 
 Function names with special characters (parentheses, asterisks) must be quoted:

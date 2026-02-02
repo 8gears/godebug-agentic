@@ -72,7 +72,12 @@ CONCLUSION  → CONFIRMED or REFUTED based on evidence
 
 ### Protocol in Practice
 
-**Note:** File paths in breakpoints must be relative to the working directory where delve was started, not relative to the debugged package. For example, if debugging `./pkg/myapp`, use `pkg/myapp/main.go:42` not just `main.go:42`.
+**Note on file paths:** Breakpoint file paths can be specified as:
+- **Short filename** (e.g., `main.go:42`) - works if the file is unique in the debug session
+- **Relative path** (e.g., `pkg/myapp/main.go:42`) - use when multiple files share the same name
+- **Absolute path** - always unambiguous
+
+If a breakpoint fails with "could not find file", run `godebug sources` to see how files are listed, then use that path.
 
 ```bash
 # HYPOTHESIS: wg.Add() is called BEFORE goroutine starts
