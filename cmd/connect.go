@@ -23,16 +23,14 @@ Example:
 
 		c, err := debugger.Connect(serverAddr)
 		if err != nil {
-			output.Error("connect", err).Print(GetOutputFormat())
-			return
+			output.Error("connect", err).PrintAndExit(GetOutputFormat())
 		}
 		defer func() { _ = c.Close() }()
 
 		// Verify connection by getting state
 		state, err := c.GetState()
 		if err != nil {
-			output.Error("connect", err).Print(GetOutputFormat())
-			return
+			output.Error("connect", err).PrintAndExit(GetOutputFormat())
 		}
 
 		data := map[string]any{
@@ -43,7 +41,7 @@ Example:
 			data["goroutineId"] = state.SelectedGoroutine.ID
 		}
 
-		output.Success("connect", data, "Connected to debug server").Print(GetOutputFormat())
+		output.Success("connect", data, "Connected to debug server").PrintAndExit(GetOutputFormat())
 	},
 }
 

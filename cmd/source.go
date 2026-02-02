@@ -32,26 +32,22 @@ Example:
 
 		state, err := c.GetState()
 		if err != nil {
-			output.Error("list", err).Print(GetOutputFormat())
-			return
+			output.Error("list", err).PrintAndExit(GetOutputFormat())
 		}
 
 		if state.SelectedGoroutine == nil {
-			output.ErrorMsg("list", "no goroutine selected").Print(GetOutputFormat())
-			return
+			output.ErrorWithInfo("list", output.NotFound("goroutine", "none selected")).PrintAndExit(GetOutputFormat())
 		}
 
 		loc := state.SelectedGoroutine.CurrentLoc
 		if loc.File == "" {
-			output.ErrorMsg("list", "no source location available").Print(GetOutputFormat())
-			return
+			output.ErrorWithInfo("list", output.NotFound("source location", "none available")).PrintAndExit(GetOutputFormat())
 		}
 
 		// Read the source file
 		file, err := os.Open(loc.File)
 		if err != nil {
-			output.Error("list", err).Print(GetOutputFormat())
-			return
+			output.ErrorWithInfo("list", output.NotFound("source file", loc.File)).PrintAndExit(GetOutputFormat())
 		}
 		defer func() { _ = file.Close() }()
 
@@ -84,8 +80,7 @@ Example:
 		}
 
 		if err := scanner.Err(); err != nil {
-			output.Error("list", err).Print(GetOutputFormat())
-			return
+			output.Error("list", err).PrintAndExit(GetOutputFormat())
 		}
 
 		data := map[string]any{
@@ -97,7 +92,7 @@ Example:
 			data["function"] = loc.Function.Name()
 		}
 
-		output.Success("list", data, fmt.Sprintf("%s:%d", loc.File, loc.Line)).Print(GetOutputFormat())
+		output.Success("list", data, fmt.Sprintf("%s:%d", loc.File, loc.Line)).PrintAndExit(GetOutputFormat())
 	},
 }
 
@@ -122,8 +117,7 @@ Example:
 
 		sources, err := c.ListSources(filter)
 		if err != nil {
-			output.Error("sources", err).Print(GetOutputFormat())
-			return
+			output.Error("sources", err).PrintAndExit(GetOutputFormat())
 		}
 
 		// Filter out runtime/internal sources for cleaner output
@@ -144,7 +138,7 @@ Example:
 			"total":   len(sources),
 		}
 
-		output.Success("sources", data, fmt.Sprintf("%d source files", len(filtered))).Print(GetOutputFormat())
+		output.Success("sources", data, fmt.Sprintf("%d source files", len(filtered))).PrintAndExit(GetOutputFormat())
 	},
 }
 

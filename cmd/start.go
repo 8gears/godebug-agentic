@@ -43,15 +43,15 @@ Examples:
 		}
 
 		config := debugger.LaunchConfig{
-			Mode:   mode,
-			Target: target,
-			Args:   programArgs,
+			Mode:    mode,
+			Target:  target,
+			Args:    programArgs,
+			Timeout: GetTimeout(),
 		}
 
 		result, err := debugger.Launch(config)
 		if err != nil {
-			output.Error("start", err).Print(GetOutputFormat())
-			return
+			output.Error("start", err).PrintAndExit(GetOutputFormat())
 		}
 
 		data := map[string]any{
@@ -61,7 +61,7 @@ Examples:
 			"mode":   result.Mode,
 		}
 
-		output.Success("start", data, "Debug server started").Print(GetOutputFormat())
+		output.Success("start", data, "Debug server started").PrintAndExit(GetOutputFormat())
 	},
 }
 

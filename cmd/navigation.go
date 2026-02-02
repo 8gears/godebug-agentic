@@ -31,20 +31,17 @@ Example:
 
 		state, err := c.GetState()
 		if err != nil {
-			output.Error("stack", err).Print(GetOutputFormat())
-			return
+			output.Error("stack", err).PrintAndExit(GetOutputFormat())
 		}
 
 		if state.SelectedGoroutine == nil {
-			output.ErrorMsg("stack", "no goroutine selected").Print(GetOutputFormat())
-			return
+			output.ErrorWithInfo("stack", output.NotFound("goroutine", "none selected")).PrintAndExit(GetOutputFormat())
 		}
 
 		cfg := debugger.DefaultLoadConfig()
 		frames, err := c.Stacktrace(state.SelectedGoroutine.ID, stackDepth, &cfg)
 		if err != nil {
-			output.Error("stack", err).Print(GetOutputFormat())
-			return
+			output.Error("stack", err).PrintAndExit(GetOutputFormat())
 		}
 
 		stackFrames := make([]map[string]any, len(frames))
@@ -66,7 +63,7 @@ Example:
 			"goroutineId": state.SelectedGoroutine.ID,
 		}
 
-		output.Success("stack", data, fmt.Sprintf("%d frames", len(stackFrames))).Print(GetOutputFormat())
+		output.Success("stack", data, fmt.Sprintf("%d frames", len(stackFrames))).PrintAndExit(GetOutputFormat())
 	},
 }
 
@@ -86,31 +83,29 @@ Example:
 
 		frameIdx, err := strconv.Atoi(args[0])
 		if err != nil {
-			output.ErrorMsg("frame", fmt.Sprintf("invalid frame index: %s", args[0])).Print(GetOutputFormat())
-			return
+			output.ErrorWithInfo("frame", output.InvalidArgumentWithDetails(
+				fmt.Sprintf("invalid frame index: %s", args[0]),
+				map[string]any{"index": args[0]},
+			)).PrintAndExit(GetOutputFormat())
 		}
 
 		state, err := c.GetState()
 		if err != nil {
-			output.Error("frame", err).Print(GetOutputFormat())
-			return
+			output.Error("frame", err).PrintAndExit(GetOutputFormat())
 		}
 
 		if state.SelectedGoroutine == nil {
-			output.ErrorMsg("frame", "no goroutine selected").Print(GetOutputFormat())
-			return
+			output.ErrorWithInfo("frame", output.NotFound("goroutine", "none selected")).PrintAndExit(GetOutputFormat())
 		}
 
 		cfg := debugger.DefaultLoadConfig()
 		frames, err := c.Stacktrace(state.SelectedGoroutine.ID, frameIdx+1, &cfg)
 		if err != nil {
-			output.Error("frame", err).Print(GetOutputFormat())
-			return
+			output.Error("frame", err).PrintAndExit(GetOutputFormat())
 		}
 
 		if frameIdx >= len(frames) {
-			output.ErrorMsg("frame", fmt.Sprintf("frame %d does not exist (stack has %d frames)", frameIdx, len(frames))).Print(GetOutputFormat())
-			return
+			output.ErrorWithInfo("frame", output.NotFound("frame", fmt.Sprintf("%d (stack has %d frames)", frameIdx, len(frames)))).PrintAndExit(GetOutputFormat())
 		}
 
 		frame := frames[frameIdx]
@@ -123,7 +118,7 @@ Example:
 			data["function"] = frame.Function.Name()
 		}
 
-		output.Success("frame", data, fmt.Sprintf("Switched to frame %d", frameIdx)).Print(GetOutputFormat())
+		output.Success("frame", data, fmt.Sprintf("Switched to frame %d", frameIdx)).PrintAndExit(GetOutputFormat())
 	},
 }
 
@@ -140,8 +135,7 @@ Example:
 
 		goroutines, _, err := c.ListGoroutines(0, 0)
 		if err != nil {
-			output.Error("goroutines", err).Print(GetOutputFormat())
-			return
+			output.Error("goroutines", err).PrintAndExit(GetOutputFormat())
 		}
 
 		state, _ := c.GetState()
@@ -181,7 +175,7 @@ Example:
 			data["selectedId"] = selectedID
 		}
 
-		output.Success("goroutines", data, fmt.Sprintf("%d goroutines", len(gs))).Print(GetOutputFormat())
+		output.Success("goroutines", data, fmt.Sprintf("%d goroutines", len(gs))).PrintAndExit(GetOutputFormat())
 	},
 }
 
@@ -199,14 +193,15 @@ Example:
 
 		id, err := strconv.ParseInt(args[0], 10, 64)
 		if err != nil {
-			output.ErrorMsg("goroutine", fmt.Sprintf("invalid goroutine ID: %s", args[0])).Print(GetOutputFormat())
-			return
+			output.ErrorWithInfo("goroutine", output.InvalidArgumentWithDetails(
+				fmt.Sprintf("invalid goroutine ID: %s", args[0]),
+				map[string]any{"id": args[0]},
+			)).PrintAndExit(GetOutputFormat())
 		}
 
 		state, err := c.SwitchGoroutine(id)
 		if err != nil {
-			output.Error("goroutine", err).Print(GetOutputFormat())
-			return
+			output.Error("goroutine", err).PrintAndExit(GetOutputFormat())
 		}
 
 		data := map[string]any{
@@ -224,7 +219,7 @@ Example:
 			}
 		}
 
-		output.Success("goroutine", data, fmt.Sprintf("Switched to goroutine %d", id)).Print(GetOutputFormat())
+		output.Success("goroutine", data, fmt.Sprintf("Switched to goroutine %d", id)).PrintAndExit(GetOutputFormat())
 	},
 }
 

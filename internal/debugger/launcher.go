@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/8gears/godebug/internal/output"
 )
 
 // LaunchMode specifies how to start the debugger
@@ -22,9 +24,10 @@ const (
 // LaunchConfig holds configuration for launching Delve
 type LaunchConfig struct {
 	Mode       LaunchMode
-	Target     string   // Path to package/binary
-	Args       []string // Arguments to pass to the program
-	BuildFlags string   // Additional build flags
+	Target     string        // Path to package/binary
+	Args       []string      // Arguments to pass to the program
+	BuildFlags string        // Additional build flags
+	Timeout    time.Duration // Timeout for startup (0 = use default 30s)
 }
 
 // LaunchResult contains the result of launching Delve
@@ -41,7 +44,7 @@ func Launch(config LaunchConfig) (*LaunchResult, error) {
 	// Find dlv binary
 	dlvPath, err := exec.LookPath("dlv")
 	if err != nil {
-		return nil, fmt.Errorf("dlv not found in PATH: %w", err)
+		return nil, output.NotFound("executable", "dlv (not found in PATH)")
 	}
 
 	// Build command arguments
@@ -75,16 +78,16 @@ func Launch(config LaunchConfig) (*LaunchResult, error) {
 	// Capture both stdout and stderr - dlv outputs to both
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create stdout pipe: %w", err)
+		return nil, output.InternalError(fmt.Sprintf("failed to create stdout pipe: %v", err))
 	}
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create stderr pipe: %w", err)
+		return nil, output.InternalError(fmt.Sprintf("failed to create stderr pipe: %v", err))
 	}
 
 	// Start the process
 	if err := cmd.Start(); err != nil {
-		return nil, fmt.Errorf("failed to start dlv: %w", err)
+		return nil, output.InternalError(fmt.Sprintf("failed to start dlv: %v", err))
 	}
 
 	// Parse the address from stdout/stderr
@@ -107,7 +110,7 @@ func Launch(config LaunchConfig) (*LaunchResult, error) {
 			// Check for errors
 			if strings.Contains(line, "error") || strings.Contains(line, "Error") {
 				select {
-				case errChan <- fmt.Errorf("dlv error: %s", line):
+				case errChan <- output.InternalError(fmt.Sprintf("dlv error: %s", line)):
 				default:
 				}
 				return
@@ -117,6 +120,12 @@ func Launch(config LaunchConfig) (*LaunchResult, error) {
 
 	go scanPipe(bufio.NewScanner(stdout))
 	go scanPipe(bufio.NewScanner(stderr))
+
+	// Use configured timeout or default to 30s
+	timeout := config.Timeout
+	if timeout == 0 {
+		timeout = 30 * time.Second
+	}
 
 	// Wait for address or timeout
 	select {
@@ -131,9 +140,9 @@ func Launch(config LaunchConfig) (*LaunchResult, error) {
 	case err := <-errChan:
 		_ = cmd.Process.Kill()
 		return nil, err
-	case <-time.After(30 * time.Second):
+	case <-time.After(timeout):
 		_ = cmd.Process.Kill()
-		return nil, fmt.Errorf("timeout waiting for dlv to start")
+		return nil, output.Timeout("dlv start", timeout.Seconds())
 	}
 }
 

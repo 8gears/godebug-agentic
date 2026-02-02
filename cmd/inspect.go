@@ -43,19 +43,16 @@ Example:
 
 		state, err := c.GetState()
 		if err != nil {
-			output.Error("locals", err).Print(GetOutputFormat())
-			return
+			output.Error("locals", err).PrintAndExit(GetOutputFormat())
 		}
 
 		if state.SelectedGoroutine == nil {
-			output.ErrorMsg("locals", "no goroutine selected").Print(GetOutputFormat())
-			return
+			output.ErrorWithInfo("locals", output.NotFound("goroutine", "none selected")).PrintAndExit(GetOutputFormat())
 		}
 
 		vars, err := c.ListLocalVars(state.SelectedGoroutine.ID, 0, debugger.DefaultLoadConfig())
 		if err != nil {
-			output.Error("locals", err).Print(GetOutputFormat())
-			return
+			output.Error("locals", err).PrintAndExit(GetOutputFormat())
 		}
 
 		variables := make([]map[string]any, len(vars))
@@ -68,7 +65,7 @@ Example:
 			"count":     len(variables),
 		}
 
-		output.Success("locals", data, fmt.Sprintf("%d local variables", len(variables))).Print(GetOutputFormat())
+		output.Success("locals", data, fmt.Sprintf("%d local variables", len(variables))).PrintAndExit(GetOutputFormat())
 	},
 }
 
@@ -85,19 +82,16 @@ Example:
 
 		state, err := c.GetState()
 		if err != nil {
-			output.Error("args", err).Print(GetOutputFormat())
-			return
+			output.Error("args", err).PrintAndExit(GetOutputFormat())
 		}
 
 		if state.SelectedGoroutine == nil {
-			output.ErrorMsg("args", "no goroutine selected").Print(GetOutputFormat())
-			return
+			output.ErrorWithInfo("args", output.NotFound("goroutine", "none selected")).PrintAndExit(GetOutputFormat())
 		}
 
 		funcArgs, err := c.ListFunctionArgs(state.SelectedGoroutine.ID, 0, debugger.DefaultLoadConfig())
 		if err != nil {
-			output.Error("args", err).Print(GetOutputFormat())
-			return
+			output.Error("args", err).PrintAndExit(GetOutputFormat())
 		}
 
 		arguments := make([]map[string]any, len(funcArgs))
@@ -110,7 +104,7 @@ Example:
 			"count":     len(arguments),
 		}
 
-		output.Success("args", data, fmt.Sprintf("%d arguments", len(arguments))).Print(GetOutputFormat())
+		output.Success("args", data, fmt.Sprintf("%d arguments", len(arguments))).PrintAndExit(GetOutputFormat())
 	},
 }
 
@@ -133,25 +127,22 @@ Examples:
 
 		state, err := c.GetState()
 		if err != nil {
-			output.Error("eval", err).Print(GetOutputFormat())
-			return
+			output.Error("eval", err).PrintAndExit(GetOutputFormat())
 		}
 
 		if state.SelectedGoroutine == nil {
-			output.ErrorMsg("eval", "no goroutine selected").Print(GetOutputFormat())
-			return
+			output.ErrorWithInfo("eval", output.NotFound("goroutine", "none selected")).PrintAndExit(GetOutputFormat())
 		}
 
 		result, err := c.Eval(state.SelectedGoroutine.ID, 0, expr, debugger.DefaultLoadConfig())
 		if err != nil {
-			output.Error("eval", err).Print(GetOutputFormat())
-			return
+			output.Error("eval", err).PrintAndExit(GetOutputFormat())
 		}
 
 		data := variableToMap(*result)
 		data["expression"] = expr
 
-		output.Success("eval", data, "").Print(GetOutputFormat())
+		output.Success("eval", data, "").PrintAndExit(GetOutputFormat())
 	},
 }
 

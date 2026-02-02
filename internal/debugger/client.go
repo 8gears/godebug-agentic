@@ -1,27 +1,55 @@
 package debugger
 
 import (
+	"context"
 	"fmt"
 	"net/rpc"
 	"net/rpc/jsonrpc"
+	"strings"
+	"time"
 
 	"github.com/go-delve/delve/service/api"
 	"github.com/go-delve/delve/service/rpc2"
+
+	"github.com/8gears/godebug/internal/output"
 )
 
 // Client wraps the Delve RPC2 client
 type Client struct {
-	addr   string
-	client *rpc.Client
+	addr    string
+	client  *rpc.Client
+	timeout time.Duration
 }
 
 // Connect creates a new client connected to the Delve server
 func Connect(addr string) (*Client, error) {
 	client, err := jsonrpc.Dial("tcp", addr)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to %s: %w", addr, err)
+		// Classify the connection error
+		if strings.Contains(err.Error(), "connection refused") {
+			return nil, output.ConnectionRefused(addr)
+		}
+		return nil, output.ConnectionFailed(addr, err)
 	}
-	return &Client{addr: addr, client: client}, nil
+	return &Client{addr: addr, client: client, timeout: 30 * time.Second}, nil
+}
+
+// ConnectWithTimeout creates a new client with a specific timeout
+func ConnectWithTimeout(addr string, timeout time.Duration) (*Client, error) {
+	client, err := jsonrpc.Dial("tcp", addr)
+	if err != nil {
+		// Classify the connection error
+		if strings.Contains(err.Error(), "connection refused") {
+			return nil, output.ConnectionRefused(addr)
+		}
+		return nil, output.ConnectionFailed(addr, err)
+	}
+	return &Client{addr: addr, client: client, timeout: timeout}, nil
+}
+
+// SetTimeout sets the operation timeout for subsequent calls
+func (c *Client) SetTimeout(timeout time.Duration) {
+	c.timeout = timeout
 }
 
 // Close closes the connection
@@ -34,9 +62,31 @@ func (c *Client) Addr() string {
 	return c.addr
 }
 
-// call is a helper for RPC calls
+// call is a helper for RPC calls (without timeout)
 func (c *Client) call(method string, args any, reply any) error {
 	return c.client.Call("RPCServer."+method, args, reply)
+}
+
+// callWithTimeout wraps an RPC call with a timeout
+func (c *Client) callWithTimeout(ctx context.Context, method string, args, reply any) error {
+	done := make(chan error, 1)
+	go func() {
+		done <- c.client.Call("RPCServer."+method, args, reply)
+	}()
+
+	select {
+	case err := <-done:
+		return err
+	case <-ctx.Done():
+		return output.Timeout(method, c.timeout.Seconds())
+	}
+}
+
+// callWithDefaultTimeout uses the client's configured timeout
+func (c *Client) callWithDefaultTimeout(method string, args, reply any) error {
+	ctx, cancel := context.WithTimeout(context.Background(), c.timeout)
+	defer cancel()
+	return c.callWithTimeout(ctx, method, args, reply)
 }
 
 // GetState returns the current debugger state
@@ -52,7 +102,18 @@ func (c *Client) GetState() (*api.DebuggerState, error) {
 // Continue resumes execution until a breakpoint is hit
 func (c *Client) Continue() (*api.DebuggerState, error) {
 	var out rpc2.CommandOut
-	err := c.call("Command", &api.DebuggerCommand{Name: api.Continue}, &out)
+	// Continue can block indefinitely, so use timeout
+	err := c.callWithDefaultTimeout("Command", &api.DebuggerCommand{Name: api.Continue}, &out)
+	if err != nil {
+		return nil, err
+	}
+	return &out.State, nil
+}
+
+// ContinueWithContext resumes execution with a custom context for timeout control
+func (c *Client) ContinueWithContext(ctx context.Context) (*api.DebuggerState, error) {
+	var out rpc2.CommandOut
+	err := c.callWithTimeout(ctx, "Command", &api.DebuggerCommand{Name: api.Continue}, &out)
 	if err != nil {
 		return nil, err
 	}
@@ -62,7 +123,7 @@ func (c *Client) Continue() (*api.DebuggerState, error) {
 // Next steps over to the next source line
 func (c *Client) Next() (*api.DebuggerState, error) {
 	var out rpc2.CommandOut
-	err := c.call("Command", &api.DebuggerCommand{Name: api.Next}, &out)
+	err := c.callWithDefaultTimeout("Command", &api.DebuggerCommand{Name: api.Next}, &out)
 	if err != nil {
 		return nil, err
 	}
@@ -72,7 +133,7 @@ func (c *Client) Next() (*api.DebuggerState, error) {
 // Step steps into a function call
 func (c *Client) Step() (*api.DebuggerState, error) {
 	var out rpc2.CommandOut
-	err := c.call("Command", &api.DebuggerCommand{Name: api.Step}, &out)
+	err := c.callWithDefaultTimeout("Command", &api.DebuggerCommand{Name: api.Step}, &out)
 	if err != nil {
 		return nil, err
 	}
@@ -82,7 +143,7 @@ func (c *Client) Step() (*api.DebuggerState, error) {
 // StepOut steps out of the current function
 func (c *Client) StepOut() (*api.DebuggerState, error) {
 	var out rpc2.CommandOut
-	err := c.call("Command", &api.DebuggerCommand{Name: api.StepOut}, &out)
+	err := c.callWithDefaultTimeout("Command", &api.DebuggerCommand{Name: api.StepOut}, &out)
 	if err != nil {
 		return nil, err
 	}
@@ -125,6 +186,10 @@ func (c *Client) ClearBreakpoint(id int) (*api.Breakpoint, error) {
 	var out rpc2.ClearBreakpointOut
 	err := c.call("ClearBreakpoint", rpc2.ClearBreakpointIn{Id: id}, &out)
 	if err != nil {
+		// Check if this is a not-found error
+		if strings.Contains(err.Error(), "not found") {
+			return nil, output.NotFound("breakpoint", fmt.Sprintf("%d", id))
+		}
 		return nil, err
 	}
 	return out.Breakpoint, nil
@@ -187,7 +252,7 @@ func (c *Client) Eval(goroutineID int64, frame int, expr string, cfg api.LoadCon
 		Cfg:  &cfg,
 	}, &out)
 	if err != nil {
-		return nil, err
+		return nil, output.EvalFailed(expr, err)
 	}
 	return out.Variable, nil
 }
@@ -227,6 +292,10 @@ func (c *Client) SwitchGoroutine(goroutineID int64) (*api.DebuggerState, error) 
 		GoroutineID: goroutineID,
 	}, &out)
 	if err != nil {
+		// Check for not found error
+		if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "unknown goroutine") {
+			return nil, output.NotFound("goroutine", fmt.Sprintf("%d", goroutineID))
+		}
 		return nil, err
 	}
 	return &out.State, nil

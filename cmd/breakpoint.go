@@ -46,8 +46,10 @@ Examples:
 			file := parts[0]
 			line, err := strconv.Atoi(parts[1])
 			if err != nil {
-				output.ErrorMsg("break", fmt.Sprintf("invalid line number: %s", parts[1])).Print(GetOutputFormat())
-				return
+				output.ErrorWithInfo("break", output.InvalidArgumentWithDetails(
+					fmt.Sprintf("invalid line number: %s", parts[1]),
+					map[string]any{"location": location, "line": parts[1]},
+				)).PrintAndExit(GetOutputFormat())
 			}
 			// Convert to absolute path if relative
 			if !filepath.IsAbs(file) {
@@ -69,8 +71,7 @@ Examples:
 
 		created, err := c.CreateBreakpoint(bp)
 		if err != nil {
-			output.Error("break", err).Print(GetOutputFormat())
-			return
+			output.Error("break", err).PrintAndExit(GetOutputFormat())
 		}
 
 		data := map[string]any{
@@ -83,7 +84,7 @@ Examples:
 			data["condition"] = created.Cond
 		}
 
-		output.Success("break", data, fmt.Sprintf("Breakpoint %d set", created.ID)).Print(GetOutputFormat())
+		output.Success("break", data, fmt.Sprintf("Breakpoint %d set", created.ID)).PrintAndExit(GetOutputFormat())
 	},
 }
 
@@ -101,14 +102,15 @@ Example:
 
 		id, err := strconv.Atoi(args[0])
 		if err != nil {
-			output.ErrorMsg("clear", fmt.Sprintf("invalid breakpoint ID: %s", args[0])).Print(GetOutputFormat())
-			return
+			output.ErrorWithInfo("clear", output.InvalidArgumentWithDetails(
+				fmt.Sprintf("invalid breakpoint ID: %s", args[0]),
+				map[string]any{"id": args[0]},
+			)).PrintAndExit(GetOutputFormat())
 		}
 
 		cleared, err := c.ClearBreakpoint(id)
 		if err != nil {
-			output.Error("clear", err).Print(GetOutputFormat())
-			return
+			output.Error("clear", err).PrintAndExit(GetOutputFormat())
 		}
 
 		data := map[string]any{
@@ -117,7 +119,7 @@ Example:
 			"line": cleared.Line,
 		}
 
-		output.Success("clear", data, fmt.Sprintf("Breakpoint %d cleared", id)).Print(GetOutputFormat())
+		output.Success("clear", data, fmt.Sprintf("Breakpoint %d cleared", id)).PrintAndExit(GetOutputFormat())
 	},
 }
 
@@ -134,8 +136,7 @@ Example:
 
 		bps, err := c.ListBreakpoints()
 		if err != nil {
-			output.Error("breakpoints", err).Print(GetOutputFormat())
-			return
+			output.Error("breakpoints", err).PrintAndExit(GetOutputFormat())
 		}
 
 		breakpoints := make([]map[string]any, 0, len(bps))
@@ -166,7 +167,7 @@ Example:
 			"count":       len(breakpoints),
 		}
 
-		output.Success("breakpoints", data, fmt.Sprintf("%d breakpoints", len(breakpoints))).Print(GetOutputFormat())
+		output.Success("breakpoints", data, fmt.Sprintf("%d breakpoints", len(breakpoints))).PrintAndExit(GetOutputFormat())
 	},
 }
 

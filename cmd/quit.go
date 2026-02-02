@@ -21,11 +21,10 @@ Example:
 
 		err := c.Detach(true)
 		if err != nil {
-			output.Error("quit", err).Print(GetOutputFormat())
-			return
+			output.Error("quit", err).PrintAndExit(GetOutputFormat())
 		}
 
-		output.Success("quit", nil, "Debug session terminated").Print(GetOutputFormat())
+		output.Success("quit", nil, "Debug session terminated").PrintAndExit(GetOutputFormat())
 	},
 }
 

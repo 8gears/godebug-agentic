@@ -22,8 +22,7 @@ Example:
 
 		state, err := c.GetState()
 		if err != nil {
-			output.Error("status", err).Print(GetOutputFormat())
-			return
+			output.Error("status", err).PrintAndExit(GetOutputFormat())
 		}
 
 		data := map[string]any{
@@ -58,7 +57,7 @@ Example:
 			msg = "Process paused"
 		}
 
-		output.Success("status", data, msg).Print(GetOutputFormat())
+		output.Success("status", data, msg).PrintAndExit(GetOutputFormat())
 	},
 }
 

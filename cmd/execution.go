@@ -57,10 +57,12 @@ Example:
 		c := MustGetClient("continue")
 		defer func() { _ = c.Close() }()
 
+		// Set the timeout from global flag
+		c.SetTimeout(GetTimeout())
+
 		state, err := c.Continue()
 		if err != nil {
-			output.Error("continue", err).Print(GetOutputFormat())
-			return
+			output.Error("continue", err).PrintAndExit(GetOutputFormat())
 		}
 
 		var msg string
@@ -72,7 +74,7 @@ Example:
 			msg = "Process stopped"
 		}
 
-		output.Success("continue", stateToData(state), msg).Print(GetOutputFormat())
+		output.Success("continue", stateToData(state), msg).PrintAndExit(GetOutputFormat())
 	},
 }
 
@@ -87,13 +89,14 @@ Example:
 		c := MustGetClient("next")
 		defer func() { _ = c.Close() }()
 
+		c.SetTimeout(GetTimeout())
+
 		state, err := c.Next()
 		if err != nil {
-			output.Error("next", err).Print(GetOutputFormat())
-			return
+			output.Error("next", err).PrintAndExit(GetOutputFormat())
 		}
 
-		output.Success("next", stateToData(state), "Stepped to next line").Print(GetOutputFormat())
+		output.Success("next", stateToData(state), "Stepped to next line").PrintAndExit(GetOutputFormat())
 	},
 }
 
@@ -108,13 +111,14 @@ Example:
 		c := MustGetClient("step")
 		defer func() { _ = c.Close() }()
 
+		c.SetTimeout(GetTimeout())
+
 		state, err := c.Step()
 		if err != nil {
-			output.Error("step", err).Print(GetOutputFormat())
-			return
+			output.Error("step", err).PrintAndExit(GetOutputFormat())
 		}
 
-		output.Success("step", stateToData(state), "Stepped into function").Print(GetOutputFormat())
+		output.Success("step", stateToData(state), "Stepped into function").PrintAndExit(GetOutputFormat())
 	},
 }
 
@@ -129,13 +133,14 @@ Example:
 		c := MustGetClient("stepout")
 		defer func() { _ = c.Close() }()
 
+		c.SetTimeout(GetTimeout())
+
 		state, err := c.StepOut()
 		if err != nil {
-			output.Error("stepout", err).Print(GetOutputFormat())
-			return
+			output.Error("stepout", err).PrintAndExit(GetOutputFormat())
 		}
 
-		output.Success("stepout", stateToData(state), "Stepped out of function").Print(GetOutputFormat())
+		output.Success("stepout", stateToData(state), "Stepped out of function").PrintAndExit(GetOutputFormat())
 	},
 }
 
@@ -154,11 +159,10 @@ Example:
 
 		state, err := c.Restart()
 		if err != nil {
-			output.Error("restart", err).Print(GetOutputFormat())
-			return
+			output.Error("restart", err).PrintAndExit(GetOutputFormat())
 		}
 
-		output.Success("restart", stateToData(state), "Program restarted").Print(GetOutputFormat())
+		output.Success("restart", stateToData(state), "Program restarted").PrintAndExit(GetOutputFormat())
 	},
 }
 
